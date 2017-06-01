@@ -1,0 +1,45 @@
+---
+title: "Capstone - Amazon fine food"
+output:
+  html_document: default
+  pdf_document: default
+---
+#**Introduction:** 
+Analyze Amazon food reviews/titles and create a prediction model which predicts the classification of the review's rating based on sentiment. The ratings will be classified as follows: >3 is positive, 3 is neutral, < 3 is negative. 
+
+Additionally, negative and positive reasons will be categorized.
+
+
+#**Who's the customer:** 
+ Vendors and competitors selling food on Amazon.
+
+#**What will they do with this information:**
+The information this analysis provides can be used to identify product improvements as well as identify what is working well and shouldn't be changed. 
+
+Additionally, this information could be used for further analysis related to targeted advertising for the reviewers.
+
+#**Possible limitations:** 
+This analysis assumes the "Score" given is consistent with the review itself.
+
+#**Datasets:**
+[DATASET](https://www.kaggle.com/snap/amazon-fine-food-reviews)
+
+The Amazon Fine Food Reviews dataset consists of 568,454 food reviews Amazon users left up to October 2012. 
+
+ # of attributes = 10
+ 
+ The columns in the table are:  
+
+- Id  
+- ProductId - unique identifier for the product  
+- UserId - unqiue identifier for the user  
+- ProfileName  
+- HelpfulnessNumerator - number of users who found the review helpful  
+- HelpfulnessDenominator - number of users who indicated whether they found the review helpful  
+- Score - rating between 1 and 5  
+- Time - timestamp for the review  
+- Summary - brief summary of the review  
+- Text - text of the review
+ 
+ 
+
