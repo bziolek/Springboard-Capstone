@@ -1,0 +1,22 @@
+---
+title: "Data Wrangling"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Data wrangling on this data set was rather straighforward and uninvolved. I checked for missing values using the Summary function, and found none. Column names were already short and intuitive. 
+
+The only wrangling that was done involved creating a new column for rating category: 
+
+```{r, eval = FALSE}
+amazon_categories <- amazon_original %>% mutate(rating_category = case_when(
+  .$Score == 5 ~ "Positive",
+  .$Score == 4 ~ "Positive",
+  .$Score == 3 ~ "Neutral",
+  .$Score == 2 ~ "Negative",
+  .$Score == 1 ~ "Negative"))
+
+  ```
