@@ -15,6 +15,13 @@ library(vioplot)
 library(tm)
 library(SnowballC)
 library(stringr)
+library(caTools)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
+library(randomForest)
+library(caret)
+library(e1071)
 
 #Import dataset
 amazon_original <- read.csv("Reviews2.csv", stringsAsFactors = F)
@@ -55,6 +62,7 @@ ggplot(amazon_categories, aes(x = Score)) +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y= "Total Count", x = "Review Score")
 
+
 ```
 
 ```{r}
@@ -64,6 +72,14 @@ ggplot(amazon_categories, aes(x = Score, y = TextChar, group = Score)) +
   ggtitle("# of Characters by Review Score") +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(y= "Character Count", x = "Review Score")
+
+#Boxplot showing distribtion of # of characters by Score
+ggplot(amazon_categories, aes(x = rating_category, y = TextChar, group = rating_category)) + 
+  geom_boxplot() +
+  ggtitle("# of Characters by Review Rating Category") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(y= "Character Count", x = "Rating Category")
+
 ```
 
 ```{r}
@@ -100,6 +116,7 @@ colnames(Terms_text) <- paste("Text", colnames(Terms_text), sep = "_")
 # Append the dependent variable and char count from original data set
 Terms_summary$Score = amazon_categories$Score
 Terms_summary$TextChar = amazon_categories$TextChar
+Terms_summary$rating_category = amazon_categories$rating_category
 
 #combine summary with text
 combined = cbind(Terms_summary, Terms_text, deparse.level = 1)
@@ -131,20 +148,61 @@ combined$CAPS_summary_proportion[is.na(combined$CAPS_summary_proportion)] <- 0
 combined$Exclamation_text_proportion[is.na(combined$Exclamation_text_proportion)] <- 0
 combined$CAPS_text_proportion[is.na(combined$CAPS_text_proportion)] <- 0
 
+
 ```
 
 ```{r}
 
-#Boxplot showing proportion of exclamation marks to total words by Score
-ggplot(combined, aes(x = Score, y = Exclamation_summary_proportion, group = Score)) + 
- geom_boxplot()
- ggtitle("Proportion of exclamation marks to total words") +
+#Boxplot showing Summary proportion of exclamation marks to total words by rating category
+ggplot(combined, aes(x = rating_category, y = Exclamation_summary_proportion, group = rating_category)) + 
+ geom_boxplot() +
+ ggtitle("Summary - Proportion of exclamation marks to total words") +
  theme(plot.title = element_text(hjust = 0.5)) +
- labs(y= "Proportion as a percent", x = "Review Score")
+ labs(y= "Proportion as a percent", x = "Rating Category")
 
 ```
  
  
+```{r}
+#Boxplot showing Text proportion of exclamation marks to total words by rating category
+ggplot(combined, aes(x = rating_category, y = Exclamation_text_proportion, group = rating_category)) + 
+ geom_boxplot() +
+ ggtitle("Text - Proportion of exclamation marks to total words") +
+ theme(plot.title = element_text(hjust = 0.5)) +
+ labs(y= "Proportion as a percent", x = "Rating Category")
+```
+
  
  
  
+```{r}
+#Boxplot showing Summary proportion of CAPS words to total words by rating category
+ggplot(combined, aes(x = rating_category, y = CAPS_summary_proportion, group = rating_category)) + 
+ geom_boxplot() +
+ ggtitle("Summary - Proportion of CAPS words to total words") +
+ theme(plot.title = element_text(hjust = 0.5)) +
+ labs(y= "Proportion as a percent", x = "Rating Category")
+
+```
+
+
+```{r}
+#Boxplot showing Text proportion of CAPS words to total words by rating category
+ggplot(combined, aes(x = rating_category, y = CAPS_text_proportion, group = rating_category)) + 
+ geom_boxplot() +
+ ggtitle("Text - Proportion of CAPS words to total words") +
+ theme(plot.title = element_text(hjust = 0.5)) +
+ labs(y= "Proportion as a percent", x = "Rating Category")
+```
+
+
+
+```{r}
+#Create training and test datasets
+set.seed(3000)
+split = sample.split(combined$rating_category, SplitRatio = 0.7)
+Train = subset(combined, split == TRUE)
+Test = subset(combined, split == FALSE)
+```
+
+
