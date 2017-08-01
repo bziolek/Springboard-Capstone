@@ -1,0 +1,285 @@
+---
+title: "Amazon reviews"
+output: html_notebook
+---
+
+
+```{r}
+
+#Load packages
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+library(vioplot)
+library(tm)
+library(SnowballC)
+library(stringr)
+library(caTools)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
+library(randomForest)
+library(caret)
+library(e1071)
+
+#Import dataset
+amazon_original <- read.csv("Reviews2.csv", stringsAsFactors = F)
+
+
+```
+
+```{r}
+#Review data, confirmed no missing values present
+summary(amazon_original)
+```
+
+```{r}
+#Filter out Neutral Scores (Score = 3) and remove the ID column
+amazon_noneutral <- filter(amazon_original, Score != 3)
+#table(amazon_noneutral$Score)
+
+amazon_noneutral <- select(amazon_noneutral, -Id)
+
+```
+
+
+```{r}
+#Create new rating_positive variable
+amazon_categories <- amazon_noneutral %>% mutate(rating_positive = case_when(
+  .$Score == 5 ~ 1,
+  .$Score == 4 ~ 1,
+  .$Score == 2 ~ 0,
+  .$Score == 1 ~ 0))
+
+amazon_categories$rating_positive <- as.factor(amazon_categories$rating_positive)
+
+write.csv(amazon_categories, file = "amazon_clean.csv")
+
+#Create a new column which contains count of characters from Text column
+amazon_categories <- mutate(amazon_categories, TextChar = nchar(Text))
+
+```
+
+
+```{r}
+#histogram showing distribution of Score across all reviews
+ggplot(amazon_categories, aes(x = Score)) +
+  geom_histogram() +
+  ggtitle("Count of Review Score") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(y= "Total Count", x = "Review Score")
+
+
+```
+
+```{r}
+
+#Boxplot showing distribtion of # of characters by Score
+ggplot(amazon_categories, aes(x = rating_positive, y = TextChar, group = rating_positive)) + 
+  geom_boxplot() +
+  ggtitle("# of Characters by Rating_Positive") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(y= "Character Count", x = "Rating Positive (1 = Yes, 2 = No)")
+
+```
+
+
+```{r}
+prop.table(table(amazon_categories$rating_positive))
+sample <- amazon_categories[sample(nrow(amazon_categories), size = 1000, replace = FALSE),]
+prop.table(table(sample$rating_positive))
+
+```
+
+
+
+```{r}
+#Create a corpus for summary and another for text
+corpus_summary = Corpus(VectorSource(sample$Summary))
+corpus_text = Corpus(VectorSource(sample$Text))
+
+#Preprocessing: Remove stopwords, and stem.
+corpus_summary = tm_map(corpus_summary, removeWords, stopwords("english"))
+corpus_text = tm_map(corpus_text, removeWords, stopwords("english"))
+corpus_summary = tm_map(corpus_summary, stemDocument)
+corpus_text = tm_map(corpus_text, stemDocument)
+
+#Build document term matrices, remove sparse terms
+dtm_summary = DocumentTermMatrix(corpus_summary)
+dtm_summary = removeSparseTerms(dtm_summary, 0.99)
+
+dtm_text = DocumentTermMatrix(corpus_text)
+dtm_text = removeSparseTerms(dtm_text, 0.93)
+```
+
+```{r}
+#dtm_summary
+#dim(dtm_summary)
+#dtm_text
+#dim(dtm_text)
+```
+
+
+```{r}
+
+#Create dataframe containing frequencies
+Terms_summary = as.data.frame(as.matrix(dtm_summary))
+Terms_text = as.data.frame(as.matrix(dtm_text))
+
+#Rename columns so source is easily identifiable
+
+colnames(Terms_summary) <- paste("Sum", colnames(Terms_summary), sep = "_")
+colnames(Terms_text) <- paste("Text", colnames(Terms_text), sep = "_")
+
+# Append the dependent variable and char count from original data set
+Terms_summary$rating_positive = sample$rating_positive
+Terms_summary$TextChar = sample$TextChar
+Terms_summary$rating_category = sample$rating_category
+
+#combine summary with text
+combined = cbind(Terms_summary, Terms_text, deparse.level = 1)
+
+```
+
+```{r}
+#Adding columns
+
+combined$Exclamation_summary = str_count(sample$Summary, pattern = "!") #count of exclamation marks
+combined$CAPS_summary = str_count(sample$Summary, "\\b[A-Z]{2,}\\b") #count of words in CAPS
+combined$summary_total = sapply(gregexpr("[[:alpha:]]+", sample$Summary), function(x) sum(x > 0)) #total # of words
+
+combined$Exclamation_summary_proportion = combined$Exclamation_summary / combined$summary_total #proportion of exclamation points to total # of words
+
+combined$CAPS_summary_proportion = combined$CAPS_summary / combined$summary_total #proportion of CAPS words to total # of words
+
+
+combined$Exclamation_text = str_count(sample$Text, pattern = "!") #count of exclamation marks
+combined$CAPS_text = str_count(sample$Text, "\\b[A-Z]{2,}\\b") #count of words in CAPS
+combined$text_total = sapply(gregexpr("[[:alpha:]]+", sample$Text), function(x) sum(x > 0)) #total # of words
+
+combined$Exclamation_text_proportion = combined$Exclamation_text / combined$text_total #proportion of exclamation points to total # of words
+combined$CAPS_text_proportion = combined$CAPS_text / combined$summary_total #proportion of CAPS words to total # of words
+
+#replace all NAs with 0
+combined$Exclamation_summary_proportion[is.na(combined$Exclamation_summary_proportion)] <- 0
+combined$CAPS_summary_proportion[is.na(combined$CAPS_summary_proportion)] <- 0
+combined$Exclamation_text_proportion[is.na(combined$Exclamation_text_proportion)] <- 0
+combined$CAPS_text_proportion[is.na(combined$CAPS_text_proportion)] <- 0
+
+
+```
+
+```{r}
+
+#Barplot showing Summary proportion of exclamation marks to total words by rating category
+plot_Exclam_summary = combined %>% group_by(rating_positive) %>% summarise(Exclamation_summary_proportion = sum(Exclamation_summary)*100/sum(summary_total))
+
+ggplot(plot_Exclam_summary,aes(x=rating_positive,y=Exclamation_summary_proportion))+
+  geom_bar(stat="identity")+
+ggtitle("Summary - Proportion of exclamation marks to total words") +
+ theme(plot.title = element_text(hjust = 0.5)) +
+ labs(y= "Proportion as a percent", x = "Rating_positive (1 = Yes, 2 = No)")
+
+```
+ 
+ 
+```{r}
+#Barplot showing Text proportion of exclamation marks to total words by rating category
+
+plot_Exclam_text = combined %>% group_by(rating_positive) %>% summarise(Exclamation_text_proportion = sum(Exclamation_text)*100/sum(text_total))
+
+ggplot(plot_Exclam_text,aes(x=rating_positive,y=Exclamation_text_proportion))+
+  geom_bar(stat="identity")+
+ggtitle("Text - Proportion of exclamation marks to total words") +
+ theme(plot.title = element_text(hjust = 0.5)) +
+ labs(y= "Proportion as a percent", x = "Rating_positive (1 = Yes, 2 = No) ")
+
+
+
+```
+
+ 
+ 
+ 
+```{r}
+#Barplot showing Summary proportion of CAPS words to total words by rating category
+plot_CAPS_summary = combined %>% group_by(rating_positive) %>% summarise(CAPS_summary_proportion = sum(CAPS_summary)*100/sum(summary_total))
+
+ggplot(plot_CAPS_summary,aes(x=rating_positive,y=CAPS_summary_proportion))+
+  geom_bar(stat="identity")+
+ggtitle("Summary - Proportion of CAPS to total words") +
+ theme(plot.title = element_text(hjust = 0.5)) +
+ labs(y= "Proportion as a percent", x = "Rating_positive (1 = Yes, 2 = No) ")
+
+```
+
+
+```{r}
+#Barplot showing Text proportion of CAPS words to total words by rating category
+plot_CAPS_text = combined %>% group_by(rating_positive) %>% summarise(CAPS_text_proportion = sum(CAPS_text)*100/sum(summary_total))
+
+ggplot(plot_CAPS_text,aes(x=rating_positive,y=CAPS_text_proportion))+
+  geom_bar(stat="identity")+
+ggtitle("Text - Proportion of CAPS to total words") +
+ theme(plot.title = element_text(hjust = 0.5)) +
+ labs(y= "Proportion as a percent", x = "Rating_positive (1 = Yes, 2 = No) ")
+```
+
+
+```{r}
+#Create training and test datasets
+set.seed(5)
+split = sample.split(sample$rating_positive, SplitRatio = 0.7)
+Train = subset(sample, split == TRUE)
+Test = subset(sample, split == FALSE)
+```
+
+
+```{r}
+#Establish baseline
+
+table(combined$rating_positive)
+
+baseline = 829/1000
+baseline
+```
+
+
+```{r}
+#Create random forest model
+set.seed(10)
+model_rf <- caret::train(rating_positive ~ .,
+                         data = Train,
+                         method = "rf",
+                         preProcess = c("scale", "center"),
+                         trControl = trainControl(method = "repeatedcv", 
+                                                  number = 10, 
+                                                  repeats = 10, 
+                                                  verboseIter = FALSE))
+```
+
+
+```{r}
+final <- data.frame(actual = Test$rating_category,
+                    predict(model_rf, newdata = Test, type = "prob"))
+
+final$predict <- ifelse(final$rating_positive > 0.5, "Positive", "Negative")
+
+```
+
+```{r}
+#Define logistic regression model
+ratingLog = glm(rating_positive ~ ., data = Train, family = binomial)
+
+```
+```{r}
+coef(summary(ratingLog))
+```
+
+```{r}
+ratingLog.tab <- coef(summary(ratingLog))
+ratingLog.tab[, "Estimate"] <- exp(coef(ratingLog))
+ratingLog.tab
+```
+
